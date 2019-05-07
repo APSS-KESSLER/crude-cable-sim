@@ -58,7 +58,7 @@ public class Cable {
 			// The lengthControlled variable is used to calculate the amount of force to apply.
 			if(i == 0) {
 				lengthControlled[i] = interPointLength / 2;
-				masses[i] = linearDensity * interPointLength / 2;
+				masses[i] = Double.POSITIVE_INFINITY; //linearDensity * interPointLength / 2;
 			} else if(i == points - 1) {
 				lengthControlled[i] = interPointLength / 2;
 				masses[i] = linearDensity * interPointLength / 2;
@@ -80,24 +80,8 @@ public class Cable {
 		applyForces(timestep);
 
 		correctVelocities();
-		// smoothVelocities();
-
 		movePoints(timestep);
-		correctLength(0);
-	}
-
-	private void smoothVelocities() {
-		double S = 1.0 - 1e9;
-
-		for(int i = 0; i < velocities.length - 1; i++) {
-			velocities[i].scale(S);
-			velocities[i].scaleAdd(velocities[i + 1], 1-S);
-		}
-
-		for(int i = velocities.length - 1; i > 0; i--) {
-			velocities[i].scale(S);
-			velocities[i].scaleAdd(velocities[i - 1], 1-S);
-		}
+		correctLength();
 	}
 
 	public double getTime() {
@@ -204,7 +188,7 @@ public class Cable {
 			// J += contributions from I[< i]
 			// Adjust by cos * (I[i-1] * (1.0 - m[i]/M[i]))
 
-			extraImpulse += I[i - 1] * (1.0 - masses[i] / M[i]) / R[i - 1].dot(R[i]);
+			extraImpulse = (I[i - 1] + extraImpulse) * (1.0 - masses[i] / M[i]) / R[i - 1].dot(R[i]);
 			J[i] += extraImpulse;
 		}
 
@@ -212,7 +196,7 @@ public class Cable {
 		for(int i = numLinks - 2; i >= 0; i--) {
 			// J += contributions from I[> i]
 
-			extraImpulse += I[i + 1] * (1.0 - masses[i + 1] / N[i + 1]) / R[i].dot(R[i + 1]);
+			extraImpulse = (I[i + 1] + extraImpulse) * (1.0 - masses[i + 1] / N[i + 1]) / R[i].dot(R[i + 1]);
 			J[i] += extraImpulse;
 		}
 
@@ -236,7 +220,7 @@ public class Cable {
 		double sum = 0;
 
 		for(int i = 1; i < positions.length; i++) {
-			sum += masses[i] * (0.5 * velocities[i].lengthSq()/* + 10 * positions[i].y()*/);
+			sum += masses[i] * (0.5 * velocities[i].lengthSq() + 9.81 * positions[i].y());
 		}
 
 		return sum;

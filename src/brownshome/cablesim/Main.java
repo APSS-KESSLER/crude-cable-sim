@@ -31,13 +31,13 @@ public class Main extends JPanel {
 
 		cable = new Cable(1000, 5, 1,
 				// Position
-				l -> new MVec3(l - 2.5, 0, 0),
+				l -> new MVec3(l, 0, 0),
 
 				// Velocity
-				l -> new MVec3(0, (l - 2.5) * (l - 2.5) * (l - 2.5), 0),
+				l -> new MVec3(0, 0, 0),
 
 				// Force
-				p -> new MVec3(0, 0, 0));
+				p -> new MVec3(0, -9.81, 0));
 	}
 
 	@Override
@@ -59,9 +59,9 @@ public class Main extends JPanel {
 
 		MVec3[] positions = cable.getPositions();
 
-		int N = 10;
+		int N = 1000;
 		for(int i = 0; i < N; i++)
-			cable.step(16.0 / 1e7);
+			cable.step(16.0 / 1e3 / N);
 
 		System.out.println(K++ + " E: " + cable.calculateEnergy());
 
@@ -73,13 +73,15 @@ public class Main extends JPanel {
 			maxTension = Math.max(maxTension, cable.getTensions()[i]);
 		}
 
-		for(int i = 1; i < positions.length; i++) {
+		int drawN = 1;
+
+		for(int i = drawN; i < positions.length; i += drawN) {
 			((Graphics2D) g).setStroke(new BasicStroke(3));
 			g.setColor(new Color((float) Math.max(Math.min(cable.getTensions()[i - 1], 1.0), 0.0), 0.0f, (float) Math.max(cable.getTensions()[i - 1] / maxTension, 0.0)));
 
 			Line2D.Double line = new Line2D.Double(
-					scale(positions[i - 1].x(), minX, maxX) * getWidth(),
-					(1 - scale(positions[i - 1].y(), minY, maxY)) * getHeight(),
+					scale(positions[i - drawN].x(), minX, maxX) * getWidth(),
+					(1 - scale(positions[i - drawN].y(), minY, maxY)) * getHeight(),
 					scale(positions[i].x(), minX, maxX) * getWidth(),
 					(1 - scale(positions[i].y(), minY, maxY)) * getHeight());
 
