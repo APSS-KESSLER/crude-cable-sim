@@ -29,7 +29,7 @@ public class Main extends JPanel {
 
 		repaint();
 
-		cable = new Cable(100, 5, 1,
+		cable = new Cable(1000, 5, 1,
 				// Position
 				l -> new MVec3(l - 2.5, 0, 0),
 
@@ -45,6 +45,8 @@ public class Main extends JPanel {
 		return new Dimension(1000, 1000);
 	}
 
+	private int K = 0;
+
 	@Override
 	public void paintComponent(Graphics g) {
 		super.paintComponent(g);
@@ -57,7 +59,11 @@ public class Main extends JPanel {
 
 		MVec3[] positions = cable.getPositions();
 
-		cable.step(16.0/10000.0);
+		int N = 10;
+		for(int i = 0; i < N; i++)
+			cable.step(16.0 / 1e7);
+
+		System.out.println(K++ + " E: " + cable.calculateEnergy());
 
 		minX = minY = -6;
 		maxX = maxY = 6;

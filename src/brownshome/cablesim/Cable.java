@@ -78,9 +78,26 @@ public class Cable {
 		time += timestep;
 
 		applyForces(timestep);
-		correctVelocities(timestep);
+
+		correctVelocities();
+		// smoothVelocities();
+
 		movePoints(timestep);
-		correctLength();
+		correctLength(0);
+	}
+
+	private void smoothVelocities() {
+		double S = 1.0 - 1e9;
+
+		for(int i = 0; i < velocities.length - 1; i++) {
+			velocities[i].scale(S);
+			velocities[i].scaleAdd(velocities[i + 1], 1-S);
+		}
+
+		for(int i = velocities.length - 1; i > 0; i--) {
+			velocities[i].scale(S);
+			velocities[i].scaleAdd(velocities[i - 1], 1-S);
+		}
 	}
 
 	public double getTime() {
@@ -108,82 +125,105 @@ public class Cable {
 	}
 
 	/** Ensure that velocities are never such that they would cause the cable to stretch */
-	private void correctVelocities(double timestep) {
-		// For each pair of points correct the velocity. Then average the results.
-		// Treat each point as if it was split in two half mass points, except for the end points
-		// We do this as a Jaccobian so it can be made parallel later
-		double[] overallChangeInVelocity = new double[tensions.length];
+	private void correctVelocities() {
+		// Ri is the normalized vector from the Pi to Pi+1
 
-		double error = 0;
-		for(int iter = 0; iter < 10000; iter++) {
-			error = singleVelocityPass(overallChangeInVelocity);
+		// Mi and Ni, are the resistance to change of the i. M is to change from the negative side. N is to change
+		// from the positive side.
+
+		// Vi is the error velocity of the n'th link
+		// Ii is the attractive impulse of Ri
+		// Ji is the attractive impulse, taking into account all other attractive impulses.
+
+		int numLinks = tensions.length;
+		int numPoints = positions.length;
+
+		Vec3[] R = new Vec3[numLinks];
+		for(int i = 0; i < numLinks; i++) {
+			MVec3 vec = new MVec3(positions[i + 1]);
+			vec.subtract(positions[i]);
+			vec.normalize();
+			R[i] = vec;
 		}
 
-		// Uncomment for error
-		// System.out.println(error);
+		// M0 is NaN as there is no link into the 0th vertex
+		double[] M = new double[numPoints];
 
-		// Save the tension values
-		for(int i = 0; i < overallChangeInVelocity.length; i++) {
-			// DV * massOfPoint = force
-			// massOfPoint = linearDensity * interPointLength
+		// The last point has no outgoing link
+		M[numPoints - 1] = masses[numPoints - 1];
 
-			tensions[i] = overallChangeInVelocity[i] * linearDensity * interPointLength;
+		for(int i = numPoints - 2; i > 0; i--) {
+			// Mi * ChangeInVi = Ii
+			// We split the applied Ii into component with the next R and the component perp to it.
+
+			double withR2 = R[i - 1].dot(R[i]);
+			withR2 *= withR2;
+
+			double perpR2 = 1 - withR2;
+
+			double motion = withR2 / (masses[i] + M[i + 1]) + perpR2 / masses[i];
+			M[i] = 1 / motion;
 		}
-	}
 
-	/** This returns the overall error in ms-1 and does a single pass over the cable. */
-	private double singleVelocityPass(double[] overallChangeInVelocity) {
-		double error = 0;
+		// The last point is NaN as it has no outgoing link
+		double[] N = new double[numPoints];
 
-		// For pair i - 1 and i
+		N[0] = masses[0];
 
-		for(int i = 1; i < velocities.length; i++) {
-			// Find Dv . Dp
-			// tensileDeltaV = ( Dv . Dp )
+		for(int i = 1; i < numPoints - 1; i++) {
+			// Ni * ChangeInVi = Ii
+			// We split the applied Ii into component with the next R and the component perp to it.
 
-			// The vector from P1 to P2
-			MVec3 deltaPosition = new MVec3(positions[i]);
-			deltaPosition.subtract(positions[i - 1]);
-			deltaPosition.normalize();
+			double withR2 = R[i - 1].dot(R[i]);
+			withR2 *= withR2;
 
-			// +ve means tension, -ve means compression
-			double requiredChangeInVelocity = deltaPosition.dot(velocities[i]) - deltaPosition.dot(velocities[i - 1]);
-			error += Math.abs(requiredChangeInVelocity);
+			double perpR2 = 1 - withR2;
 
-			overallChangeInVelocity[i - 1] += requiredChangeInVelocity;
-
-			/*
-
-			At every point a change in velocity of V is needed, the change in velocity is shared between the objects
-			1 and 2 with masses M1 and M2 by object 1 moving M2/(M1+M2) and object 2 moving M1/(M1+M2). We compute
-			1/(M1+M2)
-
-			Every object is averaged for each link it touches, so that every mass that is not the end mass appears half as
-			large.
-
-			*/
-
-			boolean isStart = i == 1;
-			boolean isEnd = i == velocities.length - 1;
-
-			double m1 = isStart ? masses[i - 1] : masses[i - 1] / 2;
-			double m2 = isEnd ? masses[i] : masses[i] / 2;
-
-			double s1 = requiredChangeInVelocity * m2 / (m1 + m2) * (isStart ? 1 : 0.5 /* Average if not the end */);
-			double s2 = -requiredChangeInVelocity * m1 / (m1 + m2) * (isEnd ? 1 : 0.5 /* Average if not the end */);
-
-			if(m1 == Double.POSITIVE_INFINITY) {
-				s1 = 0;
-				s2 = -requiredChangeInVelocity * (isEnd ? 1 : 0.5 /* Average if not the end */);
-			} else if(m2 == Double.POSITIVE_INFINITY) {
-				s1 = requiredChangeInVelocity * (isStart ? 1 : 0.5 /* Average if not the end */);
-				s2 = 0;
-			}
-
-			velocities[i - 1].scaleAdd(deltaPosition, s1);
-			velocities[i].scaleAdd(deltaPosition, s2);
+			double motion = withR2 / (masses[i] + N[i - 1]) + perpR2 / masses[i];
+			N[i] = 1 / motion;
 		}
-		return error;
+
+		// +ve means that the points are drifting apart.
+		double[] V = new double[numLinks];
+
+		for(int i = 0; i < numLinks; i++) {
+			V[i] = R[i].dot(velocities[i + 1]) - R[i].dot(velocities[i]);
+		}
+
+		double[] I = new double[numLinks];
+
+		for(int i = 0; i < numLinks; i++) {
+			I[i] = V[i] / (1.0 / N[i] + 1.0 / M[i + 1]);
+		}
+
+		// J = I + contributions from other I
+		double[] J = I.clone();
+
+		double extraImpulse = 0.0;
+		for(int i = 1; i < numLinks; i++) {
+			// J += contributions from I[< i]
+			// Adjust by cos * (I[i-1] * (1.0 - m[i]/M[i]))
+
+			extraImpulse += I[i - 1] * (1.0 - masses[i] / M[i]) / R[i - 1].dot(R[i]);
+			J[i] += extraImpulse;
+		}
+
+		extraImpulse = 0.0;
+		for(int i = numLinks - 2; i >= 0; i--) {
+			// J += contributions from I[> i]
+
+			extraImpulse += I[i + 1] * (1.0 - masses[i + 1] / N[i + 1]) / R[i].dot(R[i + 1]);
+			J[i] += extraImpulse;
+		}
+
+		velocities[0].scaleAdd(R[0], J[0] / masses[0]);
+
+		for(int i = 1; i < numPoints - 1; i++) {
+			velocities[i].scaleAdd(R[i - 1], -J[i - 1] / masses[i]);
+			velocities[i].scaleAdd(R[i], J[i] / masses[i]);
+		}
+
+		velocities[numPoints - 1].scaleAdd(R[numLinks - 1], -J[numLinks - 1] / masses[numPoints - 1]);
 	}
 
 	private void movePoints(double timestep) {
@@ -202,14 +242,16 @@ public class Cable {
 		return sum;
 	}
 
-	/** Shorten or lengthen the cable to its correct length */
 	private void correctLength() {
-		// Pin the middle of the cable
-		int middle = positions.length / 2;
+		// Pin the middle if in doubt
+		correctLength(positions.length / 2);
+	}
 
-		// Iterate from the middle to the +ve end
-		Vec3 previous = positions[middle];
-		for(int i = middle + 1; i < positions.length; i++) {
+	/** Shorten or lengthen the cable to its correct length */
+	private void correctLength(int pin) {
+		// Iterate from the pin to the +ve end
+		Vec3 previous = positions[pin];
+		for(int i = pin + 1; i < positions.length; i++) {
 			MVec3 current = positions[i];
 			current.subtract(previous);
 			current.scale(interPointLength / current.length());
@@ -219,8 +261,8 @@ public class Cable {
 		}
 
 		// Iterate from the middle to the -ve end
-		previous = positions[middle];
-		for(int i = middle - 1; i >= 0; i--) {
+		previous = positions[pin];
+		for(int i = pin - 1; i >= 0; i--) {
 			MVec3 current = positions[i];
 			current.subtract(previous);
 			current.scale(interPointLength / current.length());
