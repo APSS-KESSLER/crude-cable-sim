@@ -201,7 +201,7 @@ public class Main extends JPanel {
 		center.normalize();
 		center.scale(0.8);
 
-		g2.setStroke(new BasicStroke(2));
+		g2.setStroke(new BasicStroke(2.5f));
 
 		g2.draw(new Ellipse2D.Double((0.5 + center.x() / 2) * getWidth() - 25, (0.5 - center.y() / 2) * getHeight() - 25, 50, 50));
 
