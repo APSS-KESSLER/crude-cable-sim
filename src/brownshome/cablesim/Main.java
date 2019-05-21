@@ -1,8 +1,6 @@
 package brownshome.cablesim;
 
-import brownshome.vecmath.IVec3;
-import brownshome.vecmath.MVec2;
-import brownshome.vecmath.MVec3;
+import brownshome.vecmath.*;
 
 import java.awt.*;
 import java.awt.geom.Ellipse2D;
@@ -13,12 +11,82 @@ import javax.swing.*;
 
 public class Main extends JPanel {
 	public static void main(String[] args) {
-		SwingUtilities.invokeLater(Main::startApplication);
+		double length = 100;
+		double density = 1e-3;
+
+		int points = 1000;
+		double timestep = 1e-6;
+
+		Vec2 deploymentAngle = new IVec2(0.0, 0.0);
+		double deploymentSpeed = 10;
+
+		double endMass = 0.05;
+		double satMass = 1.30;
+
+		double friction = 0.0;
+		double brakingForce = 0.01;
+
+		for(int i = 0; i < args.length; i++) {
+			switch(args[i]) {
+				case "-l":
+				case "--length":
+					length = Double.parseDouble(args[i++]);
+					break;
+				case "-d":
+				case "--linear-density":
+					density = Double.parseDouble(args[i++]);
+					break;
+				case "-t":
+				case "--timestep":
+					timestep = Double.parseDouble(args[i++]);
+					break;
+				case "-p":
+				case "--points":
+					points = Integer.parseInt(args[i++]);
+					break;
+				case "-a":
+				case "--deployment-angle":
+					deploymentAngle = new IVec2(Double.parseDouble(args[i++]), Double.parseDouble(args[i++]));
+					break;
+				case "-s":
+				case "--deployment-speed":
+					length = Double.parseDouble(args[i++]);
+					break;
+				case "-w":
+				case "--end-mass":
+					endMass = Double.parseDouble(args[i++]);
+					break;
+				case "-W":
+				case "--sat-mass":
+					satMass = Double.parseDouble(args[i++]);
+					break;
+				case "-b":
+				case "--braking-force":
+					brakingForce = Double.parseDouble(args[i++]);
+					break;
+				case "-f":
+				case "--friction":
+					friction = Double.parseDouble(args[i++]);
+					break;
+			}
+		}
+
+		Rot3 xRotation = IRot3.fromAxisAngle(new IVec3(0, 0, 1), deploymentAngle.x());
+		Rot3 zRotation = IRot3.fromAxisAngle(new IVec3(1, 0, 0), deploymentAngle.y());
+
+		MVec3 deploymentDirection = new MVec3(0, -1, 0);
+		xRotation.rotate(deploymentDirection);
+		zRotation.rotate(deploymentDirection);
+		deploymentDirection.scale(deploymentSpeed);
+
+		Main main = new Main(length, density, points, timestep, deploymentDirection, endMass, satMass, friction, brakingForce);
+
+		SwingUtilities.invokeLater(main::startApplication);
 	}
 
-	private static void startApplication() {
+	private void startApplication() {
 		JFrame frame = new JFrame();
-		frame.getContentPane().add(new Main());
+		frame.getContentPane().add(this);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.pack();
 		frame.setLocationRelativeTo(null);
@@ -28,27 +96,33 @@ public class Main extends JPanel {
 
 	private final Cable cable;
 
-	private final double L = 100;
+	private final double L;
 	private final double u = 3.986e14;
-	private final double theta = Math.PI / 2;
+	private final double timestep;
 
-	Main() {
+	Main(double length, double density, int points, double timestep, Vec3 deploymentDirection, double endMass, double satMass, double friction, double brakingForce) {
 		super(true);
 
-		repaint();
+		L = length;
+		this.timestep = timestep;
 
-		cable = new Cable(new IVec3(0, 6.771e6, 0), new IVec3(Math.sqrt(u / 6.771e6), 0, 0), 1.2, 0.05, L / 500.0, 1e-3, p -> {
+		Timer timer = new Timer(16, event -> {
+			repaint();
+		});
+		timer.start();
+
+		cable = new Cable(new IVec3(0, 6.771e6, 0), new IVec3(Math.sqrt(u / 6.771e6), 0, 0), satMass, endMass, L / points, density, p -> {
 					MVec3 vec = new MVec3(p);
 
 					vec.normalize();
 					vec.scale(-u / p.lengthSq());
 
 					return vec;
-				}, new IVec3(0.1, 0, 0), l -> {
+				}, deploymentDirection, l -> {
 					if(l < L) {
-						return 0;
+						return friction;
 					} else {
-						return 0.01;
+						return friction + brakingForce;
 					}
 				});
 	}
@@ -61,7 +135,7 @@ public class Main extends JPanel {
 	private int K = 0;
 
 	@Override
-	public void paintComponent(Graphics g) {
+	public synchronized void paintComponent(Graphics g) {
 		super.paintComponent(g);
 
 		Graphics2D g2 = (Graphics2D) g;
@@ -70,13 +144,11 @@ public class Main extends JPanel {
 
 		double minX, minY, maxX, maxY;
 
+		for(int i = 0; i < 2000; i++) {
+			cable.step(timestep);
+		}
+
 		MVec3[] positions = cable.getPositions();
-
-		int N = 1000;
-		for(int i = 0; i < N; i++)
-			cable.step(4.0 / N);
-
-		//System.out.println(K++ + " E: " + cable.calculateEnergy());
 
 		minX = minY = Double.POSITIVE_INFINITY;
 		maxX = maxY = Double.NEGATIVE_INFINITY;
@@ -139,7 +211,7 @@ public class Main extends JPanel {
 		g2.drawString(String.format("Time: %.3fs", cable.getTime()), 50, 70);
 		g2.drawString(String.format("Velocity: %.3fms-1", cable.getVelocities()[cable.getVelocities().length / 2].length()), 50, 90);
 		g2.drawString(String.format("Length: %.3fm", cable.getLength()), 50, 110);
-		g2.drawString(String.format("Max Tension: %.3fN", maxTension), 50, 130);
+		// g2.drawString(String.format("Max Tension: %.3fN", maxTension), 50, 130);
 
 		repaint();
 	}
