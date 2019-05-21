@@ -51,7 +51,7 @@ public class Main extends JPanel {
 						break;
 					case "-s":
 					case "--deployment-speed":
-						length = Double.parseDouble(args[i++]);
+						deploymentSpeed = Double.parseDouble(args[i++]);
 						break;
 					case "-w":
 					case "--end-mass":
@@ -173,7 +173,7 @@ public class Main extends JPanel {
 		minX = minY = Double.POSITIVE_INFINITY;
 		maxX = maxY = Double.NEGATIVE_INFINITY;
 
-		for(var vec : cable.getPositions()) {
+		for(Vec3 vec : cable.getPositions()) {
 			minX = Math.min(minX, vec.x());
 			maxX = Math.max(maxX, vec.x());
 			minY = Math.min(minY, vec.y());
