@@ -15,7 +15,7 @@ public class Main extends JPanel {
 		double density = 1e-3;
 
 		int points = 1000;
-		double timestep = 1e-6;
+		double timestep = 1e-4;
 
 		Vec2 deploymentAngle = new IVec2(0.0, 0.0);
 		double deploymentSpeed = 10;
@@ -24,51 +24,71 @@ public class Main extends JPanel {
 		double satMass = 1.30;
 
 		double friction = 0.0;
-		double brakingForce = 0.01;
+		double brakingForce = 1;
 
-		for(int i = 0; i < args.length; i++) {
-			switch(args[i]) {
-				case "-l":
-				case "--length":
-					length = Double.parseDouble(args[i++]);
-					break;
-				case "-d":
-				case "--linear-density":
-					density = Double.parseDouble(args[i++]);
-					break;
-				case "-t":
-				case "--timestep":
-					timestep = Double.parseDouble(args[i++]);
-					break;
-				case "-p":
-				case "--points":
-					points = Integer.parseInt(args[i++]);
-					break;
-				case "-a":
-				case "--deployment-angle":
-					deploymentAngle = new IVec2(Double.parseDouble(args[i++]), Double.parseDouble(args[i++]));
-					break;
-				case "-s":
-				case "--deployment-speed":
-					length = Double.parseDouble(args[i++]);
-					break;
-				case "-w":
-				case "--end-mass":
-					endMass = Double.parseDouble(args[i++]);
-					break;
-				case "-W":
-				case "--sat-mass":
-					satMass = Double.parseDouble(args[i++]);
-					break;
-				case "-b":
-				case "--braking-force":
-					brakingForce = Double.parseDouble(args[i++]);
-					break;
-				case "-f":
-				case "--friction":
-					friction = Double.parseDouble(args[i++]);
-					break;
+		try {
+			for(int i = 0; i < args.length;) {
+				switch(args[i++]) {
+					case "-l":
+					case "--length":
+						length = Double.parseDouble(args[i++]);
+						break;
+					case "-d":
+					case "--linear-density":
+						density = Double.parseDouble(args[i++]);
+						break;
+					case "-t":
+					case "--timestep":
+						timestep = Double.parseDouble(args[i++]);
+						break;
+					case "-p":
+					case "--points":
+						points = Integer.parseInt(args[i++]);
+						break;
+					case "-a":
+					case "--deployment-angle":
+						deploymentAngle = new IVec2(Double.parseDouble(args[i++]), Double.parseDouble(args[i++]));
+						break;
+					case "-s":
+					case "--deployment-speed":
+						length = Double.parseDouble(args[i++]);
+						break;
+					case "-w":
+					case "--end-mass":
+						endMass = Double.parseDouble(args[i++]);
+						break;
+					case "-W":
+					case "--sat-mass":
+						satMass = Double.parseDouble(args[i++]);
+						break;
+					case "-b":
+					case "--braking-force":
+						brakingForce = Double.parseDouble(args[i++]);
+						break;
+					case "-f":
+					case "--friction":
+						friction = Double.parseDouble(args[i++]);
+						break;
+					default:
+						System.out.println("Usage: java -jar JAR_FILE [options]\n" +
+								"-l, --length VAL\t\t\t\t\tThe length in m.\n" +
+								"-d, --linear-density VAL\t\t\tThe density in kg/m\n" +
+								"-t, --timestep VAL\t\t\t\t\tThe internal timestep of the simulation in s. Smaller numbers lead to slower but more accurate simulation.\n" +
+								"-p, --points VAL\t\t\t\t\tThe number of simulation points. Higher numbers lead to a slower but more accurate simulation.\n" +
+								"-a, --deployment-angle ANGX ANGY\tThe deployment angle in degrees. 0 is straight down. ANGX is in the plane of viewing and ANGY is into the screen\n" +
+								"-s, --deploymeny-speed SPEED\t\tThe deployment speed in m/s.\n" +
+								"-w, --end-mass MASS\t\t\t\t\tThe weight of the end mass in kg.\n" +
+								"-W, --sat-mass MASS\t\t\t\t\tThe weight of the satellite in kg.\n" +
+								"-f, --friction FORCE\t\t\t\tThe frictional force in N of deployment.\n" +
+								"-b, --braking-force FORCE\t\t\tThe applied braking force this force will be applied once the cable length exceeds the supplied length.\n");
+						return;
+				}
 			}
+		} catch(IndexOutOfBoundsException | NumberFormatException e) {
+			System.out.println(e);
+			System.out.println();
+			main(new String[] { "--help" });
+			return;
 		}
 
 		Rot3 xRotation = IRot3.fromAxisAngle(new IVec3(0, 0, 1), deploymentAngle.x());
@@ -106,11 +126,6 @@ public class Main extends JPanel {
 		L = length;
 		this.timestep = timestep;
 
-		Timer timer = new Timer(16, event -> {
-			repaint();
-		});
-		timer.start();
-
 		cable = new Cable(new IVec3(0, 6.771e6, 0), new IVec3(Math.sqrt(u / 6.771e6), 0, 0), satMass, endMass, L / points, density, p -> {
 					MVec3 vec = new MVec3(p);
 
@@ -125,6 +140,11 @@ public class Main extends JPanel {
 						return friction + brakingForce;
 					}
 				});
+
+		Timer timer = new Timer(16, event -> {
+			repaint();
+		});
+		timer.start();
 	}
 
 	@Override
@@ -144,7 +164,7 @@ public class Main extends JPanel {
 
 		double minX, minY, maxX, maxY;
 
-		for(int i = 0; i < 2000; i++) {
+		for(int i = 0; i < 200; i++) {
 			cable.step(timestep);
 		}
 
@@ -160,10 +180,10 @@ public class Main extends JPanel {
 			maxY = Math.max(maxY, vec.y());
 		}
 
-		double centerX = (minX + maxX) / 2;
-		double centerY = (minY + maxY) / 2;
+		double centerX = cable.getSatPosition().x();
+		double centerY = cable.getSatPosition().y();
 
-		double range = L * 1.2;
+		double range = L * 3;
 
 		minX = centerX - range / 2;
 		minY = centerY - range / 2;
@@ -181,9 +201,9 @@ public class Main extends JPanel {
 		center.normalize();
 		center.scale(0.8);
 
-		g2.setStroke(new BasicStroke(3));
+		g2.setStroke(new BasicStroke(2));
 
-		g2.draw(new Ellipse2D.Double((0.5 + center.x() / 2) * getWidth(), (0.5 - center.y() / 2) * getHeight(), 50, 50));
+		g2.draw(new Ellipse2D.Double((0.5 + center.x() / 2) * getWidth() - 25, (0.5 - center.y() / 2) * getHeight() - 25, 50, 50));
 
 		for(int i = drawN; i < positions.length; i += drawN) {
 			g.setColor(new Color((float) Math.max(Math.min(cable.getTensions()[i - 1], 1.0), 0.0), (float) Math.max(cable.getTensions()[i - 1] / maxTension, 0.0), 0));
@@ -200,10 +220,10 @@ public class Main extends JPanel {
 		g2.setColor(Color.BLACK);
 
 		Rectangle2D.Double sat = new Rectangle2D.Double(
-				scale(cable.getSatPosition().x(), minX, maxX) * getWidth() - 25,
-				(1 - scale(cable.getSatPosition().y(), minY, maxY)) * getHeight() - 25,
-				50,
-				50);
+				scale(cable.getSatPosition().x(), minX, maxX) * getWidth() - 10,
+				(1 - scale(cable.getSatPosition().y(), minY, maxY)) * getHeight() - 10,
+				20,
+				20);
 
 		g2.draw(sat);
 
@@ -211,9 +231,6 @@ public class Main extends JPanel {
 		g2.drawString(String.format("Time: %.3fs", cable.getTime()), 50, 70);
 		g2.drawString(String.format("Velocity: %.3fms-1", cable.getVelocities()[cable.getVelocities().length / 2].length()), 50, 90);
 		g2.drawString(String.format("Length: %.3fm", cable.getLength()), 50, 110);
-		// g2.drawString(String.format("Max Tension: %.3fN", maxTension), 50, 130);
-
-		repaint();
 	}
 
 	private double scale(double v, double min, double max) {
