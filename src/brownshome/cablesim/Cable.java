@@ -2,8 +2,10 @@ package brownshome.cablesim;
 
 import brownshome.vecmath.*;
 
+import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.function.DoubleFunction;
+import java.util.function.DoubleUnaryOperator;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
@@ -13,14 +15,19 @@ import java.util.function.UnaryOperator;
 public class Cable {
 	private static int numberOfThreads = 20;
 
-	private final MVec3[] positions;
-	private final MVec3[] velocities;
+	private final MVec3 satPosition;
+	private final MVec3 satVelocity;
+	private final double satMass;
 
-	private final double[] masses;
-	private final double[] lengthControlled;
+	private final DoubleUnaryOperator brakingForce;
+
+	private MVec3[] positions;
+	private MVec3[] velocities;
+
+	private double[] masses;
 
 	/** This is the tension in the link between two of the points */
-	private final double[] tensions;
+	private double[] tensions;
 
 	private final double interPointLength;
 	private final UnaryOperator<Vec3> forcePerUnitLength;
@@ -37,51 +44,77 @@ public class Cable {
 	 * @param initialVelocity A function that returns the velocity of the cable given L
 	 * @param forcePerUnitLength A function that returns the force placed on the cable per unit length for a given position
 	 */
-	public Cable(int points, double length, double linearDensity, DoubleFunction<MVec3> initialPosition, DoubleFunction<MVec3> initialVelocity, UnaryOperator<Vec3> forcePerUnitLength) {
-		assert points > 2;
+	public Cable(Vec3 satPosition, Vec3 satVelocity, double satMass, double endMass, double pointDistance, double linearDensity, UnaryOperator<Vec3> forcePerUnitLength, Vec3 deploymentVelocity, DoubleUnaryOperator brakingForce) {
+		this.satPosition = new MVec3(satPosition);
+		this.satVelocity = new MVec3(satVelocity);
 
-		positions = new MVec3[points];
-		velocities = new MVec3[points];
-		masses = new double[points];
-		lengthControlled = new double[points];
+		this.brakingForce = brakingForce;
 
-		tensions = new double[points - 1];
+		positions = new MVec3[] { new MVec3(satPosition) };
+		velocities = new MVec3[] { new MVec3(deploymentVelocity) };
+		velocities[0].add(satVelocity);
 
-		this.interPointLength = length / (points - 1);
+		// End mass
+		masses = new double[] { endMass };
+		this.satMass = satMass;
+
+		tensions = new double[0];
+
+		this.interPointLength = pointDistance;
 		this.linearDensity = linearDensity;
 		this.forcePerUnitLength = forcePerUnitLength;
 
-		for(int i = 0; i < points; i++) {
-			double l = i * interPointLength;
-
-			// The mass of a point is related to the amount of material it holds
-			// The lengthControlled variable is used to calculate the amount of force to apply.
-			if(i == 0) {
-				lengthControlled[i] = interPointLength / 2;
-				masses[i] = Double.POSITIVE_INFINITY; //linearDensity * interPointLength / 2;
-			} else if(i == points - 1) {
-				lengthControlled[i] = interPointLength / 2;
-				masses[i] = linearDensity * interPointLength / 2;
-			} else {
-				lengthControlled[i] = interPointLength;
-				masses[i] = linearDensity * interPointLength;
-			}
-
-			positions[i] = initialPosition.apply(l);
-			velocities[i] = initialVelocity.apply(l);
-		}
-
-		correctLength();
+		correctLength(positions.length - 1);
 	}
 
 	public void step(double timestep) {
 		time += timestep;
 
+		addPoint(timestep);
+
 		applyForces(timestep);
 
-		correctVelocities();
+		applyBrakingForce(timestep);
+
+		correctVelocities(timestep);
 		movePoints(timestep);
-		correctLength();
+
+		correctLength(positions.length - 1);
+	}
+
+	private void addPoint(double timestep) {
+		Vec3 position = positions[positions.length - 1];
+
+		MVec3 difference = new MVec3(position);
+		difference.subtract(satPosition);
+
+		double l = difference.length();
+
+		if(l > interPointLength) {
+			// Add point
+
+			positions = Arrays.copyOf(positions, positions.length + 1);
+
+			MVec3 addedPos = new MVec3(position);
+
+			addedPos.scale(1.0 - interPointLength / l);
+			addedPos.scaleAdd(satPosition, interPointLength / l);
+
+			positions[positions.length - 1] = addedPos;
+
+			velocities = Arrays.copyOf(velocities, velocities.length + 1);
+
+			// Start at 0
+			velocities[velocities.length - 1] = new MVec3(satVelocity);
+
+			masses = Arrays.copyOf(masses, masses.length + 1);
+
+			masses[masses.length - 1] = linearDensity * interPointLength;
+
+			tensions = Arrays.copyOf(tensions, tensions.length + 1);
+
+			correctVelocities(timestep);
+		}
 	}
 
 	public double getTime() {
@@ -103,13 +136,54 @@ public class Cable {
 	private void applyForces(double timestep) {
 		// dV = forcePerLength * lengthPerPoint / massPerPoint * timestep
 
+		satVelocity.scaleAdd(forcePerUnitLength.apply(satPosition), timestep);
+
 		for(int i = 0; i < velocities.length; i++) {
-			velocities[i].scaleAdd(forcePerUnitLength.apply(positions[i]), lengthControlled[i] / masses[i] * timestep);
+			velocities[i].scaleAdd(forcePerUnitLength.apply(positions[i]), timestep);
 		}
 	}
 
+	private void applyBrakingForce(double timestep) {
+		double force = brakingForce.applyAsDouble(getLength());
+
+		if(force == 0)
+			return;
+
+		Vec3 positionOfSatEnd = positions[positions.length - 1];
+		MVec3 velocityOfSatEnd = velocities[velocities.length - 1];
+
+		MVec3 distanceFromSat = new MVec3(positionOfSatEnd);
+		distanceFromSat.subtract(satPosition);
+
+		MVec3 relativeVelocity = new MVec3(velocityOfSatEnd);
+		relativeVelocity.subtract(satVelocity);
+
+		MVec3 appliedForce;
+
+		if(distanceFromSat.lengthSq() < 0.001) {
+			if(relativeVelocity.lengthSq() < 0.001)
+				return;
+
+			appliedForce = relativeVelocity;
+		} else if(relativeVelocity.dot(distanceFromSat) > 0) {
+			appliedForce = distanceFromSat;
+		} else {
+			return;
+		}
+
+		appliedForce.normalize();
+		appliedForce.scale(-force);
+
+		velocityOfSatEnd.scaleAdd(appliedForce, timestep / masses[positions.length - 1]);
+		satVelocity.scaleAdd(appliedForce, -timestep / satMass);
+	}
+
 	/** Ensure that velocities are never such that they would cause the cable to stretch */
-	private void correctVelocities() {
+	private void correctVelocities(double timestep) {
+		if(positions.length == 1) {
+			return;
+		}
+
 		// Ri is the normalized vector from the Pi to Pi+1
 
 		// Mi and Ni, are the resistance to change of the i. M is to change from the negative side. N is to change
@@ -200,6 +274,10 @@ public class Cable {
 			J[i] += extraImpulse;
 		}
 
+		for(int i = 0; i < numLinks; i++) {
+			tensions[i] = tensions[i] * 0.9999 + J[i] * 0.0001 / timestep;
+		}
+
 		velocities[0].scaleAdd(R[0], J[0] / masses[0]);
 
 		for(int i = 1; i < numPoints - 1; i++) {
@@ -211,6 +289,8 @@ public class Cable {
 	}
 
 	private void movePoints(double timestep) {
+		satPosition.scaleAdd(satVelocity, timestep);
+
 		for(int i = 0; i < positions.length; i++) {
 			positions[i].scaleAdd(velocities[i], timestep);
 		}
@@ -254,5 +334,13 @@ public class Cable {
 
 			previous = current;
 		}
+	}
+
+	public double getLength() {
+		return positions.length * interPointLength;
+	}
+
+	public Vec3 getSatPosition() {
+		return satPosition;
 	}
 }
