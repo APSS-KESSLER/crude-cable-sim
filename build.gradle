@@ -1,15 +1,26 @@
 plugins {
 	id 'application'
-	id 'com.zyxist.chainsaw' version '0.3.1'
 }
 
-mainClassName = 'brownshome.cablesim.Main'
-javaModule.name = 'brownshome.cablesim'
+repositories {
+	maven {
+		url = 'https://maven.pkg.github.com/Brownshome/Vecmath'
+		credentials {
+			username = project.properties['gpr.usr']
+			password = project.properties['gpr.key']
+		}
+	}
+}
 
 sourceSets {
 	main.java.srcDirs = ['src']
 }
 
 dependencies {
-	compile project(':Vecmath')
+	implementation 'brownshome:vecmath:[3.0.0,4.0.0)'
+}
+
+run {
+	mainClass = 'brownshome.cablesim.Main'
+	mainModule = 'brownshome.cablesim'
 }

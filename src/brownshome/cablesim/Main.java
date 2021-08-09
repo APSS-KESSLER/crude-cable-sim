@@ -10,14 +10,14 @@ import java.awt.geom.Rectangle2D;
 import javax.swing.*;
 
 public class Main extends JPanel {
-	public static void main(String[] args) {
+	public static void main(String... args) {
 		double length = 100;
 		double density = 1e-3;
 
 		int points = 1000;
 		double timestep = 1e-4;
 
-		Vec2 deploymentAngle = new IVec2(0.0, 0.0);
+		Vec2 deploymentAngle = Vec2.of(0.0, 0.0);
 		double deploymentSpeed = 10;
 
 		double endMass = 0.05;
@@ -28,73 +28,46 @@ public class Main extends JPanel {
 
 		try {
 			for(int i = 0; i < args.length;) {
-				switch(args[i++]) {
-					case "-l":
-					case "--length":
-						length = Double.parseDouble(args[i++]);
-						break;
-					case "-d":
-					case "--linear-density":
-						density = Double.parseDouble(args[i++]);
-						break;
-					case "-t":
-					case "--timestep":
-						timestep = Double.parseDouble(args[i++]);
-						break;
-					case "-p":
-					case "--points":
-						points = Integer.parseInt(args[i++]);
-						break;
-					case "-a":
-					case "--deployment-angle":
-						deploymentAngle = new IVec2(Double.parseDouble(args[i++]), Double.parseDouble(args[i++]));
-						break;
-					case "-s":
-					case "--deployment-speed":
-						deploymentSpeed = Double.parseDouble(args[i++]);
-						break;
-					case "-w":
-					case "--end-mass":
-						endMass = Double.parseDouble(args[i++]);
-						break;
-					case "-W":
-					case "--sat-mass":
-						satMass = Double.parseDouble(args[i++]);
-						break;
-					case "-b":
-					case "--braking-force":
-						brakingForce = Double.parseDouble(args[i++]);
-						break;
-					case "-f":
-					case "--friction":
-						friction = Double.parseDouble(args[i++]);
-						break;
-					default:
-						System.out.println("Usage: java -jar JAR_FILE [options]\n" +
-								"-l, --length VAL\t\t\t\t\tThe length in m.\n" +
-								"-d, --linear-density VAL\t\t\tThe density in kg/m\n" +
-								"-t, --timestep VAL\t\t\t\t\tThe internal timestep of the simulation in s. Smaller numbers lead to slower but more accurate simulation.\n" +
-								"-p, --points VAL\t\t\t\t\tThe number of simulation points. Higher numbers lead to a slower but more accurate simulation.\n" +
-								"-a, --deployment-angle ANGX ANGY\tThe deployment angle in degrees. 0 is straight down. ANGX is in the plane of viewing and ANGY is into the screen\n" +
-								"-s, --deploymeny-speed SPEED\t\tThe deployment speed in m/s.\n" +
-								"-w, --end-mass MASS\t\t\t\t\tThe weight of the end mass in kg.\n" +
-								"-W, --sat-mass MASS\t\t\t\t\tThe weight of the satellite in kg.\n" +
-								"-f, --friction FORCE\t\t\t\tThe frictional force in N of deployment.\n" +
-								"-b, --braking-force FORCE\t\t\tThe applied braking force this force will be applied once the cable length exceeds the supplied length.\n");
+				switch (args[i++]) {
+					case "-l", "--length" -> length = Double.parseDouble(args[i++]);
+					case "-d", "--linear-density" -> density = Double.parseDouble(args[i++]);
+					case "-t", "--timestep" -> timestep = Double.parseDouble(args[i++]);
+					case "-p", "--points" -> points = Integer.parseInt(args[i++]);
+					case "-a", "--deployment-angle" -> deploymentAngle = Vec2.of(Double.parseDouble(args[i++]), Double.parseDouble(args[i++]));
+					case "-s", "--deployment-speed" -> deploymentSpeed = Double.parseDouble(args[i++]);
+					case "-w", "--end-mass" -> endMass = Double.parseDouble(args[i++]);
+					case "-W", "--sat-mass" -> satMass = Double.parseDouble(args[i++]);
+					case "-b", "--braking-force" -> brakingForce = Double.parseDouble(args[i++]);
+					case "-f", "--friction" -> friction = Double.parseDouble(args[i++]);
+					default -> {
+						System.out.println("""
+								Usage: java -jar JAR_FILE [options]
+								-l, --length VAL\t\t\t\t\tThe length in m.
+								-d, --linear-density VAL\t\t\tThe density in kg/m
+								-t, --timestep VAL\t\t\t\t\tThe internal timestep of the simulation in s. Smaller numbers lead to slower but more accurate simulation.
+								-p, --points VAL\t\t\t\t\tThe number of simulation points. Higher numbers lead to a slower but more accurate simulation.
+								-a, --deployment-angle ANGX ANGY\tThe deployment angle in degrees. 0 is straight down. ANGX is in the plane of viewing and ANGY is into the screen
+								-s, --deploymeny-speed SPEED\t\tThe deployment speed in m/s.
+								-w, --end-mass MASS\t\t\t\t\tThe weight of the end mass in kg.
+								-W, --sat-mass MASS\t\t\t\t\tThe weight of the satellite in kg.
+								-f, --friction FORCE\t\t\t\tThe frictional force in N of deployment.
+								-b, --braking-force FORCE\t\t\tThe applied braking force this force will be applied once the cable length exceeds the supplied length.
+								""");
 						return;
+					}
 				}
 			}
 		} catch(IndexOutOfBoundsException | NumberFormatException e) {
 			System.out.println(e);
 			System.out.println();
-			main(new String[] { "--help" });
+			main("--help");
 			return;
 		}
 
-		Rot3 xRotation = IRot3.fromAxisAngle(new IVec3(0, 0, 1), deploymentAngle.x());
-		Rot3 zRotation = IRot3.fromAxisAngle(new IVec3(1, 0, 0), deploymentAngle.y());
+		Rot3 xRotation = Rot3.fromAxisAngle(Vec3.Z_AXIS, deploymentAngle.x());
+		Rot3 zRotation = Rot3.fromAxisAngle(Vec3.X_AXIS, deploymentAngle.y());
 
-		MVec3 deploymentDirection = new MVec3(0, -1, 0);
+		MVec3 deploymentDirection = Vec3.of(0, -1, 0);
 		xRotation.rotate(deploymentDirection);
 		zRotation.rotate(deploymentDirection);
 		deploymentDirection.scale(deploymentSpeed);
@@ -126,8 +99,8 @@ public class Main extends JPanel {
 		L = length;
 		this.timestep = timestep;
 
-		cable = new Cable(new IVec3(0, 6.771e6, 0), new IVec3(Math.sqrt(u / 6.771e6), 0, 0), satMass, endMass, L / points, density, p -> {
-					MVec3 vec = new MVec3(p);
+		cable = new Cable(Vec3.of(0, 6.771e6, 0), Vec3.of(Math.sqrt(u / 6.771e6), 0, 0), satMass, endMass, L / points, density, p -> {
+					MVec3 vec = p.copy();
 
 					vec.normalize();
 					vec.scale(-u / p.lengthSq());
@@ -197,7 +170,7 @@ public class Main extends JPanel {
 
 		int drawN = 1;
 
-		MVec2 center = new MVec2(-centerX, -centerY);
+		MVec2 center = Vec2.of(-centerX, -centerY);
 		center.normalize();
 		center.scale(0.8);
 

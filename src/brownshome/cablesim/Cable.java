@@ -45,13 +45,13 @@ public class Cable {
 	 * @param forcePerUnitLength A function that returns the force placed on the cable per unit length for a given position
 	 */
 	public Cable(Vec3 satPosition, Vec3 satVelocity, double satMass, double endMass, double pointDistance, double linearDensity, UnaryOperator<Vec3> forcePerUnitLength, Vec3 deploymentVelocity, DoubleUnaryOperator brakingForce) {
-		this.satPosition = new MVec3(satPosition);
-		this.satVelocity = new MVec3(satVelocity);
+		this.satPosition = satPosition.copy();
+		this.satVelocity = satVelocity.copy();
 
 		this.brakingForce = brakingForce;
 
-		positions = new MVec3[] { new MVec3(satPosition) };
-		velocities = new MVec3[] { new MVec3(deploymentVelocity) };
+		positions = new MVec3[] { satPosition.copy() };
+		velocities = new MVec3[] { deploymentVelocity.copy() };
 		velocities[0].add(satVelocity);
 
 		// End mass
@@ -85,7 +85,7 @@ public class Cable {
 	private void addPoint(double timestep) {
 		Vec3 position = positions[positions.length - 1];
 
-		MVec3 difference = new MVec3(position);
+		MVec3 difference = position.copy();
 		difference.subtract(satPosition);
 
 		double l = difference.length();
@@ -95,7 +95,7 @@ public class Cable {
 
 			positions = Arrays.copyOf(positions, positions.length + 1);
 
-			MVec3 addedPos = new MVec3(position);
+			MVec3 addedPos = position.copy();
 
 			addedPos.scale(1.0 - interPointLength / l);
 			addedPos.scaleAdd(satPosition, interPointLength / l);
@@ -105,7 +105,7 @@ public class Cable {
 			velocities = Arrays.copyOf(velocities, velocities.length + 1);
 
 			// Start at 0
-			velocities[velocities.length - 1] = new MVec3(satVelocity);
+			velocities[velocities.length - 1] = satVelocity.copy();
 
 			masses = Arrays.copyOf(masses, masses.length + 1);
 
@@ -152,10 +152,10 @@ public class Cable {
 		Vec3 positionOfSatEnd = positions[positions.length - 1];
 		MVec3 velocityOfSatEnd = velocities[velocities.length - 1];
 
-		MVec3 distanceFromSat = new MVec3(positionOfSatEnd);
+		MVec3 distanceFromSat = positionOfSatEnd.copy();
 		distanceFromSat.subtract(satPosition);
 
-		MVec3 relativeVelocity = new MVec3(velocityOfSatEnd);
+		MVec3 relativeVelocity = velocityOfSatEnd.copy();
 		relativeVelocity.subtract(satVelocity);
 
 		MVec3 appliedForce;
@@ -198,7 +198,7 @@ public class Cable {
 
 		Vec3[] R = new Vec3[numLinks];
 		for(int i = 0; i < numLinks; i++) {
-			MVec3 vec = new MVec3(positions[i + 1]);
+			MVec3 vec = positions[i + 1].copy();
 			vec.subtract(positions[i]);
 			vec.normalize();
 			R[i] = vec;
